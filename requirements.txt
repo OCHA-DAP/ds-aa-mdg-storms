@@ -1,0 +1,6 @@
+geopandas
+jupyter-black
+matplotlib
+numpy
+pandas
+shapely

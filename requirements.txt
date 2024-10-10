@@ -1,6 +1,11 @@
+python-dotenv
 geopandas
+jinja2
 jupyter-black
 matplotlib
 numpy
 pandas
+pyarrow
+seaborn
 shapely
+tqdm

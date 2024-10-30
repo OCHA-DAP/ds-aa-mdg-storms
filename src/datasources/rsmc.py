@@ -103,6 +103,17 @@ def load_historical_forecast_distances() -> pd.DataFrame:
 def calculate_historical_forecast_distances():
     """Calculate distances between historical RSMC forecasts and AOIs"""
     adm = codab.load_codab()
+    # Reproject to a CRS that uses meters (e.g., EPSG:3857)
+    adm0_buffer = adm.to_crs(epsg=3857)
+
+    # Apply the buffer of 100 km (100,000 meters)
+    adm0_buffer["geometry"] = adm0_buffer.geometry.buffer(
+        100 * 1000
+    )  # 100 km = 100,000 meters
+
+    # Reproject back to the original CRS
+    adm = adm0_buffer.to_crs(adm.crs)
+
     df = load_processed_historical_forecasts()
     df = df.sort_values(["issue_time", "valid_time", "cyclone_name"])
     df = df.drop_duplicates(
@@ -133,7 +144,7 @@ def calculate_historical_forecast_distances():
             df_interp["longitude"], df_interp["latitude"], crs=4326
         ),
     )
-    for pcode, adm1 in adm.to_crs(3857).set_index("ADM1_PCODE").iterrows():
+    for pcode, adm1 in adm.to_crs(3857).set_index("ADM0_PCODE").iterrows():
         gdf[f"{pcode}_distance_km"] = (
             gdf.to_crs(3857).distance(adm1.geometry) / 1000
         )

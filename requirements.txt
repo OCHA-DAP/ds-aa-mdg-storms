@@ -1,11 +1,13 @@
 python-dotenv
 geopandas
+geopy
 jinja2
 jupyter-black
 matplotlib
 numpy
 pandas
 pyarrow
+scipy
 seaborn
 shapely
 tqdm

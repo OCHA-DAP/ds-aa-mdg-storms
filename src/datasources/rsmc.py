@@ -49,6 +49,7 @@ def calculate_rp(
     distance_thresh: float = 0,
     wind_thresh: float = 48,
     by_total_storms: bool = False,
+    scenario: float = None,
 ):
     """Calculate return periods for historical forecast data
 
@@ -67,19 +68,46 @@ def calculate_rp(
     wind_thresh
         wind speed threshold in knots
         default is 48, which corresponds to STS
+    scenario
+        Scenario number to apply custom filtering (e.g., scenario 2.5 combines two thresholds)
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame with return periods
+    float
+        Calculated return period
     """
     total_seasons = df["season"].nunique()
-    dff = df[
-        (df["lt_hour"] >= min_lt)
-        & (df["lt_hour"] <= max_lt)
-        & (df[f"{pcode}_distance_km"] <= distance_thresh)
-        & (df["max_wind_kt"] >= wind_thresh)
-    ]
+
+    # Filter for scenario 2.5 specifically with combined thresholds
+    if scenario == 2.5:
+        # Filter for 64 knots at 0 km
+        df_64_0 = df[
+            (df["lt_hour"] >= min_lt)
+            & (df["lt_hour"] <= max_lt)
+            & (df[f"{pcode}_distance_km"] <= 0)
+            & (df["max_wind_kt"] >= 64)
+        ]
+
+        # Filter for 90 knots at 100 km
+        df_90_100 = df[
+            (df["lt_hour"] >= min_lt)
+            & (df["lt_hour"] <= max_lt)
+            & (df[f"{pcode}_distance_km"] <= 100)
+            & (df["max_wind_kt"] >= 90)
+        ]
+
+        # Combine both filters to get unique storms or seasons
+        dff = pd.concat([df_64_0, df_90_100]).drop_duplicates()
+    else:
+        # Standard filtering for other scenarios
+        dff = df[
+            (df["lt_hour"] >= min_lt)
+            & (df["lt_hour"] <= max_lt)
+            & (df[f"{pcode}_distance_km"] <= distance_thresh)
+            & (df["max_wind_kt"] >= wind_thresh)
+        ]
+
+    # Calculate return period based on unique storms or seasons
     if by_total_storms:
         try:
             rp = total_seasons / dff["numberseason"].nunique()
@@ -90,6 +118,7 @@ def calculate_rp(
             rp = total_seasons / dff["season"].nunique()
         except ZeroDivisionError:
             rp = np.nan
+
     return rp
 
 
@@ -103,16 +132,6 @@ def load_historical_forecast_distances() -> pd.DataFrame:
 def calculate_historical_forecast_distances():
     """Calculate distances between historical RSMC forecasts and AOIs"""
     adm = codab.load_codab()
-    # Reproject to a CRS that uses meters (e.g., EPSG:3857)
-    adm0_buffer = adm.to_crs(epsg=3857)
-
-    # Apply the buffer of 100 km (100,000 meters)
-    adm0_buffer["geometry"] = adm0_buffer.geometry.buffer(
-        100 * 1000
-    )  # 100 km = 100,000 meters
-
-    # Reproject back to the original CRS
-    adm = adm0_buffer.to_crs(adm.crs)
 
     df = load_processed_historical_forecasts()
     df = df.sort_values(["issue_time", "valid_time", "cyclone_name"])
@@ -144,9 +163,10 @@ def calculate_historical_forecast_distances():
             df_interp["longitude"], df_interp["latitude"], crs=4326
         ),
     )
-    for pcode, adm1 in adm.to_crs(3857).set_index("ADM0_PCODE").iterrows():
+    gdf = gdf.to_crs(32738)
+    for pcode, adm1 in adm.to_crs(32738).set_index("ADM0_PCODE").iterrows():
         gdf[f"{pcode}_distance_km"] = (
-            gdf.to_crs(3857).distance(adm1.geometry) / 1000
+            gdf.geometry.distance(adm1.geometry) / 1000
         )
     gdf.drop(columns=["geometry"]).to_parquet(
         RSMC_PROC_DISTANCES_PATH, index=False
@@ -270,3 +290,7 @@ def parse_single_file(filepath) -> pd.DataFrame:
     return df
 
 
+
+# %%
+#process_historical_forecasts()
+#calculate_historical_forecast_distances()
